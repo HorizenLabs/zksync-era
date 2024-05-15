@@ -1,9 +1,13 @@
+use core::fmt::Debug;
 use std::sync::Arc;
 
+use subxt::{OnlineClient, PolkadotConfig};
 use zksync_config::configs::eth_sender::{ProofLoadingMode, ProofSendingMode, SenderConfig};
 use zksync_contracts::BaseSystemContractsHashes;
 use zksync_dal::{Connection, Core, CoreDal};
-use zksync_l1_contract_interface::i_executor::methods::{ExecuteBatches, ProveBatches};
+use zksync_l1_contract_interface::i_executor::methods::{
+    ExecuteBatches, NewHorizenProof, ProveBatches,
+};
 use zksync_object_store::{ObjectStore, ObjectStoreError};
 use zksync_prover_interface::outputs::L1BatchProofForL1;
 use zksync_types::{
@@ -11,6 +15,7 @@ use zksync_types::{
     helpers::unix_timestamp_ms, protocol_version::L1VerifierConfig, pubdata_da::PubdataDA,
     L1BatchNumber, ProtocolVersionId,
 };
+use zksync_utils::h256_to_u256;
 
 use super::{
     aggregated_operations::AggregatedOperation,
@@ -21,7 +26,9 @@ use super::{
     },
 };
 
-#[derive(Debug)]
+#[subxt::subxt(runtime_metadata_path = "../../../etc/nh/metadata.scale")]
+pub mod nh {}
+
 pub struct Aggregator {
     commit_criteria: Vec<Box<dyn L1BatchPublishCriterion>>,
     proof_criteria: Vec<Box<dyn L1BatchPublishCriterion>>,
@@ -35,6 +42,21 @@ pub struct Aggregator {
     /// transactions.
     operate_4844_mode: bool,
     pubdata_da: PubdataDA,
+    nh_client: Option<OnlineClient<PolkadotConfig>>,
+}
+
+impl Debug for Aggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Aggregator")
+            .field("commit_criteria", &self.commit_criteria)
+            .field("proof_criteria", &self.proof_criteria)
+            .field("execute_criteria", &self.execute_criteria)
+            .field("config", &self.config)
+            .field("blob_store", &self.blob_store)
+            .field("operate_4844_mode", &self.operate_4844_mode)
+            .field("pubdata_da", &self.pubdata_da)
+            .finish()
+    }
 }
 
 impl Aggregator {
@@ -44,6 +66,7 @@ impl Aggregator {
         operate_4844_mode: bool,
         pubdata_da: PubdataDA,
         l1_batch_commit_data_generator: Arc<dyn L1BatchCommitDataGenerator>,
+        nh_client: Option<OnlineClient<PolkadotConfig>>,
     ) -> Self {
         Self {
             commit_criteria: vec![
@@ -104,6 +127,7 @@ impl Aggregator {
             blob_store,
             operate_4844_mode,
             pubdata_da,
+            nh_client,
         }
     }
 
@@ -193,7 +217,6 @@ impl Aggregator {
             .get_last_committed_to_eth_l1_batch()
             .await
             .unwrap()?;
-
         let ready_for_commit_l1_batches = if protocol_version_id.is_pre_boojum() {
             blocks_dal
                 .pre_boojum_get_ready_for_commit_l1_batches(
@@ -286,10 +309,11 @@ impl Aggregator {
 
     async fn load_real_proof_operation(
         storage: &mut Connection<'_, Core>,
-        l1_verifier_config: L1VerifierConfig,
-        proof_loading_mode: &ProofLoadingMode,
-        blob_store: &dyn ObjectStore,
+        _l1_verifier_config: L1VerifierConfig,
+        _proof_loading_mode: &ProofLoadingMode,
+        _blob_store: &dyn ObjectStore,
         is_4844_mode: bool,
+        nh_client: Option<OnlineClient<PolkadotConfig>>,
     ) -> Option<ProveBatches> {
         let previous_proven_batch_number = storage
             .blocks_dal()
@@ -322,59 +346,105 @@ impl Aggregator {
             .await
             .unwrap()
         {
-            let verifier_config_for_next_batch = storage
+            let _verifier_config_for_next_batch = storage
                 .protocol_versions_dal()
                 .l1_verifier_config_for_version(version_id)
                 .await
                 .unwrap();
-            if verifier_config_for_next_batch != l1_verifier_config {
+            //println!(
+            //    "verifier_config_for_next_batch {:?}, l1_verifier_config {:?}",
+            //    verifier_config_for_next_batch, l1_verifier_config
+            //);
+            //TODO: readd
+            //if verifier_config_for_next_batch != l1_verifier_config {
+            //    return None;
+            //}
+        }
+        println!("Batch to prove {:?}", batch_to_prove);
+        match storage
+            .nh_dal()
+            .get_nh_attestation_from_batch_number(batch_to_prove)
+            .await
+        {
+            Some(attestation) => {
+                tracing::info!(
+                    "Found Attestation: {:?} with ID: {:?}",
+                    attestation.proofs_attestation,
+                    attestation.attestation_id
+                );
+
+                let attestation_element = storage
+                    .proof_generation_dal()
+                    .get_nh_attestation_element_from_batch_number(batch_to_prove)
+                    .await
+                    .map_err(|err| eprintln!("Failed to get the NH attestation element: {err:?}"))
+                    .ok()?
+                    .unwrap();
+
+                let nh_runtime_api = nh_client?
+                    .runtime_api()
+                    .at_latest()
+                    .await
+                    .map_err(|err| eprintln!("Failed to create NH RuntimeAPi: {err:?}"))
+                    .ok()?;
+
+                let poe_merkle_path_request = nh::apis()
+                    .po_e_api()
+                    .get_proof_path(attestation.attestation_id.as_u64(), attestation_element);
+
+                let poe_merkle_path_response = nh_runtime_api
+                    .call(poe_merkle_path_request)
+                    .await
+                    .map_err(|err| eprintln!("Failed to get MerklePath from NH Mainchain: {err:?}"))
+                    .ok()?
+                    .unwrap();
+                tracing::info!("Poe merkle path response: {:?}", poe_merkle_path_response);
+
+                let proofs = NewHorizenProof {
+                    attestation_id: attestation.attestation_id.as_u64(),
+                    merkle_path: poe_merkle_path_response
+                        .proof
+                        .iter()
+                        .map(|el| h256_to_u256(*el))
+                        .collect(),
+                    leaf_count: poe_merkle_path_response.number_of_leaves,
+                    index: poe_merkle_path_response.leaf_index,
+                };
+                tracing::info!("Horizen Proof {:?}", proofs);
+
+                let previous_proven_batch_metadata = storage
+                    .blocks_dal()
+                    .get_l1_batch_metadata(previous_proven_batch_number)
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "L1 batch #{} with submitted proof is not complete in the DB",
+                            previous_proven_batch_number
+                        );
+                    });
+                let metadata_for_batch_being_proved = storage
+                    .blocks_dal()
+                    .get_l1_batch_metadata(previous_proven_batch_number + 1)
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "L1 batch #{} with generated proof is not complete in the DB",
+                            previous_proven_batch_number + 1
+                        );
+                    });
+                Some(ProveBatches {
+                    prev_l1_batch: previous_proven_batch_metadata,
+                    l1_batches: vec![metadata_for_batch_being_proved],
+                    proofs: proofs.into(),
+                    should_verify: true,
+                })
+            }
+            None => {
                 return None;
             }
         }
-        let proofs = match proof_loading_mode {
-            ProofLoadingMode::OldProofFromDb => {
-                unreachable!("OldProofFromDb is not supported anymore")
-            }
-            ProofLoadingMode::FriProofFromGcs => {
-                load_wrapped_fri_proofs_for_range(batch_to_prove, batch_to_prove, blob_store).await
-            }
-        };
-        if proofs.is_empty() {
-            // The proof for the next L1 batch is not generated yet
-            return None;
-        }
-
-        assert_eq!(proofs.len(), 1);
-
-        let previous_proven_batch_metadata = storage
-            .blocks_dal()
-            .get_l1_batch_metadata(previous_proven_batch_number)
-            .await
-            .unwrap()
-            .unwrap_or_else(|| {
-                panic!(
-                    "L1 batch #{} with submitted proof is not complete in the DB",
-                    previous_proven_batch_number
-                );
-            });
-        let metadata_for_batch_being_proved = storage
-            .blocks_dal()
-            .get_l1_batch_metadata(previous_proven_batch_number + 1)
-            .await
-            .unwrap()
-            .unwrap_or_else(|| {
-                panic!(
-                    "L1 batch #{} with generated proof is not complete in the DB",
-                    previous_proven_batch_number + 1
-                );
-            });
-
-        Some(ProveBatches {
-            prev_l1_batch: previous_proven_batch_metadata,
-            l1_batches: vec![metadata_for_batch_being_proved],
-            proofs,
-            should_verify: true,
-        })
     }
 
     async fn prepare_dummy_proof_operation(
@@ -383,6 +453,7 @@ impl Aggregator {
         ready_for_proof_l1_batches: Vec<L1BatchWithMetadata>,
         last_sealed_l1_batch: L1BatchNumber,
     ) -> Option<ProveBatches> {
+        println!("Prepare dummy proof operation...");
         let batches = extract_ready_subrange(
             storage,
             &mut self.proof_criteria,
@@ -401,7 +472,7 @@ impl Aggregator {
         Some(ProveBatches {
             prev_l1_batch: prev_batch,
             l1_batches: batches,
-            proofs: vec![],
+            proofs: Default::default(),
             should_verify: false,
         })
     }
@@ -415,12 +486,14 @@ impl Aggregator {
     ) -> Option<ProveBatches> {
         match self.config.proof_sending_mode {
             ProofSendingMode::OnlyRealProofs => {
+                println!("Get_proof_operation => OnlyRealProofs");
                 Self::load_real_proof_operation(
                     storage,
                     l1_verifier_config,
                     &self.config.proof_loading_mode,
                     &*self.blob_store,
                     self.operate_4844_mode,
+                    self.nh_client.clone(),
                 )
                 .await
             }
@@ -444,6 +517,7 @@ impl Aggregator {
                     &self.config.proof_loading_mode,
                     &*self.blob_store,
                     self.operate_4844_mode,
+                    self.nh_client.clone(),
                 )
                 .await
                 {
@@ -495,7 +569,7 @@ async fn extract_ready_subrange(
     )
 }
 
-pub async fn load_wrapped_fri_proofs_for_range(
+pub async fn _load_wrapped_fri_proofs_for_range(
     from: L1BatchNumber,
     to: L1BatchNumber,
     blob_store: &dyn ObjectStore,

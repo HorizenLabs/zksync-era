@@ -1,10 +1,10 @@
 //! Definition of zkSync network priority operations: operations initiated from the L1.
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 
 use serde::{Deserialize, Serialize};
 use zksync_basic_types::{
-    ethabi::{decode, ParamType, Token},
+    ethabi::{decode, ethereum_types::BigEndianHash, ParamType, Token},
     Address, L1BlockNumber, Log, PriorityOpId, H160, H256, U256,
 };
 use zksync_utils::u256_to_account_address;
@@ -12,7 +12,7 @@ use zksync_utils::u256_to_account_address;
 use super::Transaction;
 use crate::{
     helpers::unix_timestamp_ms,
-    l1::error::L1TxParseError,
+    l1::error::{L1TxParseError, NewHorizenParseError},
     l2::TransactionType,
     priority_op_onchain_data::{PriorityOpOnchainData, PriorityOpOnchainMetadata},
     tx::Execute,
@@ -349,5 +349,31 @@ impl TryFrom<Log> for L1Tx {
             execute,
             received_timestamp_ms: unix_timestamp_ms(),
         })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NHAttestation {
+    pub attestation_id: U256,
+    pub proofs_attestation: H256,
+}
+
+impl TryFrom<Log> for NHAttestation {
+    type Error = NewHorizenParseError;
+
+    fn try_from(event: Log) -> Result<Self, Self::Error> {
+        let attestation_id = event.topics.get(1).unwrap().into_uint();
+        let attestation = event.topics.get(2).unwrap();
+
+        Ok(Self {
+            attestation_id,
+            proofs_attestation: attestation.clone(),
+        })
+    }
+}
+
+impl fmt::Display for NHAttestation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "NHAttestation ID: {}", self.attestation_id)
     }
 }

@@ -33,6 +33,7 @@ impl Distribution<TempConfigStore> for EncodeDist {
             gas_adjuster_config: self.sample(rng),
             object_store_config: self.sample(rng),
             consensus_config: self.sample(rng),
+            new_horizen_config: None,
         }
     }
 }

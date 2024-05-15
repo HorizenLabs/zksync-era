@@ -268,6 +268,7 @@ impl Distribution<configs::ContractsConfig> for EncodeDist {
             genesis_rollup_leaf_index: self.sample(rng),
             genesis_root: rng.gen(),
             genesis_protocol_version: self.sample(rng),
+            nh_verifier_addr: rng.gen(),
         }
     }
 }

@@ -6,6 +6,7 @@ use zksync_types::{web3::types::Log, H256};
 use crate::eth_watch::client::{Error, EthClient};
 
 pub mod governance_upgrades;
+pub mod nh;
 pub mod priority_ops;
 pub mod upgrades;
 

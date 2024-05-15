@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE proof_generation_details\n            SET\n                status = $1,\n                updated_at = NOW(),\n                attestation_id = $3,\n                attestation_element = $4\n            WHERE\n                l1_batch_number = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Numeric",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b5fc4834d19bbbe29038f6b41e5ec96d5d60614f705c6286216a1938dd4af7e"
+}

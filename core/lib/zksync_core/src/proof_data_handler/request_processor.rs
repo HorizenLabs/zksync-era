@@ -6,30 +6,72 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use crypto_codegen::serialize_proof;
+use hex::encode;
+use subxt::{OnlineClient, PolkadotConfig};
+use subxt_signer::sr25519::Keypair;
 use zksync_config::configs::ProofDataHandlerConfig;
 use zksync_dal::{ConnectionPool, Core, CoreDal, SqlxError};
 use zksync_object_store::{ObjectStore, ObjectStoreError};
-use zksync_prover_interface::api::{
-    ProofGenerationData, ProofGenerationDataRequest, ProofGenerationDataResponse,
-    SubmitProofRequest, SubmitProofResponse,
+use zksync_prover_interface::{
+    api::{
+        ProofGenerationData, ProofGenerationDataRequest, ProofGenerationDataResponse,
+        SubmitProofRequest, SubmitProofResponse,
+    },
+    outputs::L1BatchProofForL1,
 };
 use zksync_types::{
     basic_fri_types::Eip4844Blobs, commitment::serialize_commitments, web3::signing::keccak256,
     L1BatchNumber, H256,
 };
-use zksync_utils::u256_to_h256;
+use zksync_utils::{u256_to_bytes_be, u256_to_h256};
+
+#[derive(Clone)]
+pub struct NhClient {
+    client: OnlineClient<PolkadotConfig>,
+    kp: Keypair,
+}
+
+impl NhClient {
+    pub fn new(client: OnlineClient<PolkadotConfig>, kp: Keypair) -> Self {
+        Self { client, kp }
+    }
+
+    async fn submit_proof(&self, raw_proof: [u8; 1440]) -> Result<(u64, H256), subxt::Error> {
+        let submit_proof_tx = nh::tx().settlement_zksync_pallet().submit_proof(raw_proof);
+
+        // Submit the submitProof extrinsic, and wait for it to be successful
+        // and in a finalized block. We get back the extrinsic events if all is well.
+        let events = self
+            .client
+            .tx()
+            .sign_and_submit_then_watch_default(&submit_proof_tx, &self.kp)
+            .await?
+            .wait_for_finalized_success()
+            .await?;
+
+        // Find a Transfer event and print it.
+        let transfer_event = events.find_first::<nh::poe::events::NewElement>()?.unwrap();
+        println!("New Element success: {transfer_event:?}");
+        Ok((transfer_event.attestation_id, transfer_event.value))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct RequestProcessor {
     blob_store: Arc<dyn ObjectStore>,
     pool: ConnectionPool<Core>,
     config: ProofDataHandlerConfig,
+    nh_client: Option<NhClient>,
 }
 
 pub(crate) enum RequestProcessorError {
     ObjectStore(ObjectStoreError),
     Sqlx(SqlxError),
 }
+
+#[subxt::subxt(runtime_metadata_path = "../../../etc/nh/metadata.scale")]
+pub mod nh {}
 
 impl IntoResponse for RequestProcessorError {
     fn into_response(self) -> Response {
@@ -63,11 +105,13 @@ impl RequestProcessor {
         blob_store: Arc<dyn ObjectStore>,
         pool: ConnectionPool<Core>,
         config: ProofDataHandlerConfig,
+        nh_client: Option<NhClient>,
     ) -> Self {
         Self {
             blob_store,
             pool,
             config,
+            nh_client,
         }
     }
 
@@ -156,10 +200,12 @@ impl RequestProcessor {
         Path(l1_batch_number): Path<u32>,
         Json(payload): Json<SubmitProofRequest>,
     ) -> Result<Json<SubmitProofResponse>, RequestProcessorError> {
+        println!("Submit proof!");
         tracing::info!("Received proof for block number: {:?}", l1_batch_number);
         let l1_batch_number = L1BatchNumber(l1_batch_number);
         match payload {
             SubmitProofRequest::Proof(proof) => {
+                let (_input, _p) = serialize_proof(&proof.scheduler_proof);
                 let blob_url = self
                     .blob_store
                     .put(l1_batch_number, &*proof)
@@ -243,12 +289,42 @@ impl RequestProcessor {
                     .map_err(RequestProcessorError::Sqlx)?;
             }
             SubmitProofRequest::SkippedProofGeneration => {
+                println!(
+                    "SubmitProof --> SkippedProofGeneration {}",
+                    l1_batch_number.0
+                );
+
+                // Build a submitProof extrinsic.
+
+                //Mock proof
+                let data = include_bytes!("../../../../../etc/nh/l1_batch_proof_1.bin");
+                let parsed: L1BatchProofForL1 = bincode::deserialize(data.as_slice()).unwrap();
+
+                let (input, p) = serialize_proof(&parsed.scheduler_proof);
+                let proof_bytes = p.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+                let pi_bytes = input.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+
+                println!("PROOF {:?}", encode(proof_bytes.clone()));
+                println!("PI {:?}", encode(pi_bytes.clone()));
+
+                let raw_proof: [u8; 1440] = [proof_bytes, pi_bytes].concat().as_slice()[0..1440]
+                    .try_into()
+                    .unwrap();
+
+                let (attestation_id, value) = self
+                    .nh_client
+                    .as_ref()
+                    .unwrap()
+                    .submit_proof(raw_proof)
+                    .await
+                    .unwrap();
+
                 self.pool
                     .connection()
                     .await
                     .unwrap()
                     .proof_generation_dal()
-                    .mark_proof_generation_job_as_skipped(l1_batch_number)
+                    .mark_proof_generation_job_as_skipped(l1_batch_number, attestation_id, value)
                     .await
                     .map_err(RequestProcessorError::Sqlx)?;
             }
