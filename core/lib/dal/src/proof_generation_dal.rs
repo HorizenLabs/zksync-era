@@ -74,6 +74,8 @@ impl ProofGenerationDal<'_, '_> {
         &mut self,
         block_number: L1BatchNumber,
         proof_blob_url: &str,
+        attestation_id: u64,
+        attestation_element: H256,
     ) -> Result<(), SqlxError> {
         sqlx::query!(
             r#"
@@ -81,12 +83,16 @@ impl ProofGenerationDal<'_, '_> {
             SET
                 status = 'generated',
                 proof_blob_url = $1,
-                updated_at = NOW()
+                updated_at = NOW(),
+                attestation_id = $3,
+                attestation_element = $4
             WHERE
                 l1_batch_number = $2
             "#,
             proof_blob_url,
-            i64::from(block_number.0)
+            i64::from(block_number.0),
+            u256_to_big_decimal(U256::from(attestation_id)),
+            attestation_element.as_bytes(),
         )
         .execute(self.storage.conn())
         .await?
