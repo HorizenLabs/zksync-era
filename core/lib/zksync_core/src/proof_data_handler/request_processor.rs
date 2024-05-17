@@ -205,7 +205,6 @@ impl RequestProcessor {
         let l1_batch_number = L1BatchNumber(l1_batch_number);
         match payload {
             SubmitProofRequest::Proof(proof) => {
-                let (_input, _p) = serialize_proof(&proof.scheduler_proof);
                 let blob_url = self
                     .blob_store
                     .put(l1_batch_number, &*proof)
@@ -282,6 +281,25 @@ impl RequestProcessor {
                         );
                     }
                 }
+                let (input, p) = serialize_proof(&parsed.scheduler_proof);
+                let proof_bytes = p.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+                let pi_bytes = input.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+
+                println!("PROOF {:?}", encode(proof_bytes.clone()));
+                println!("PI {:?}", encode(pi_bytes.clone()));
+
+                let raw_proof: [u8; 1440] = [proof_bytes, pi_bytes].concat().as_slice()[0..1440]
+                    .try_into()
+                    .unwrap();
+
+                let (attestation_id, value) = self
+                    .nh_client
+                    .as_ref()
+                    .unwrap()
+                    .submit_proof(raw_proof)
+                    .await
+                    .unwrap();
+
                 storage
                     .proof_generation_dal()
                     .save_proof_artifacts_metadata(l1_batch_number, &blob_url)

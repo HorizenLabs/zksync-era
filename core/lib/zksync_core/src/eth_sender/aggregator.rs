@@ -486,7 +486,7 @@ impl Aggregator {
     ) -> Option<ProveBatches> {
         match self.config.proof_sending_mode {
             ProofSendingMode::OnlyRealProofs => {
-                println!("Get_proof_operation => OnlyRealProofs");
+                //println!("Get_proof_operation => OnlyRealProofs");
                 Self::load_real_proof_operation(
                     storage,
                     l1_verifier_config,
