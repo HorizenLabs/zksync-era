@@ -302,7 +302,12 @@ impl RequestProcessor {
 
                 storage
                     .proof_generation_dal()
-                    .save_proof_artifacts_metadata(l1_batch_number, &blob_url)
+                    .save_proof_artifacts_metadata(
+                        l1_batch_number,
+                        &blob_url,
+                        attestation_id,
+                        value,
+                    )
                     .await
                     .map_err(RequestProcessorError::Sqlx)?;
             }
