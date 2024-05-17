@@ -281,7 +281,7 @@ impl RequestProcessor {
                         );
                     }
                 }
-                let (input, p) = serialize_proof(&parsed.scheduler_proof);
+                let (input, p) = serialize_proof(&proof.scheduler_proof);
                 let proof_bytes = p.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
                 let pi_bytes = input.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
 
