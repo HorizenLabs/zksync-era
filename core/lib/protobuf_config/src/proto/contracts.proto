@@ -39,4 +39,5 @@ message Contracts {
     optional uint64 genesis_rollup_leaf_index = 35; // optional;
     optional bytes genesis_batch_commitment = 36; // optional; h256
     optional uint32 genesis_protocol_version= 37; // optional;
+    optional bytes nh_verifier_addr = 38; // required; H160
 }

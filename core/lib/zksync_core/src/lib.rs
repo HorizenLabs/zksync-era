@@ -12,6 +12,8 @@ use api_server::tx_sender::master_pool_sink::MasterPoolSink;
 use fee_model::{ApiFeeInputProvider, BatchFeeModelInputProvider, MainNodeFeeInputProvider};
 use prometheus_exporter::PrometheusExporterConfig;
 use prover_dal::Prover;
+use subxt::{OnlineClient, PolkadotConfig};
+use subxt_signer::{sr25519::Keypair, SecretUri};
 use temp_config_store::{Secrets, TempConfigStore};
 use tokio::{
     sync::{oneshot, watch},
@@ -84,6 +86,7 @@ use crate::{
     },
     metadata_calculator::{MetadataCalculator, MetadataCalculatorConfig},
     metrics::{InitStage, APP_METRICS},
+    proof_data_handler::NhClient,
     state_keeper::{
         create_state_keeper, MempoolFetcher, MempoolGuard, OutputHandler, SequencerSealer,
         StateKeeperPersistence,
@@ -353,6 +356,12 @@ pub async fn initialize_components(
         tokio::spawn(circuit_breaker_checker.run(stop_receiver.clone())),
     ];
 
+    let nh_config = configs
+        .new_horizen_config
+        .clone()
+        .context("new_horizen_config")?;
+    let nh_url = nh_config.url;
+    let nh_client = OnlineClient::<PolkadotConfig>::from_url(nh_url.clone()).await?;
     if components.contains(&Component::WsApi)
         || components.contains(&Component::HttpApi)
         || components.contains(&Component::ContractVerificationApi)
@@ -569,6 +578,7 @@ pub async fn initialize_components(
     }
 
     let main_zksync_contract_address = contracts_config.diamond_proxy_addr;
+    let nh_verifier_contract_address = contracts_config.nh_verifier_addr;
 
     if components.contains(&Component::EthWatcher) {
         let started_at = Instant::now();
@@ -590,6 +600,7 @@ pub async fn initialize_components(
                 main_zksync_contract_address,
                 governance,
                 stop_receiver.clone(),
+                nh_verifier_contract_address,
             )
             .await
             .context("start_eth_watch()")?,
@@ -648,6 +659,7 @@ pub async fn initialize_components(
                 eth_client_blobs_addr.is_some(),
                 eth_sender.sender.pubdata_sending_mode.into(),
                 l1_batch_commit_data_generator.clone(),
+                Some(nh_client.clone()),
             ),
             Arc::new(eth_client),
             contracts_config.validator_timelock_addr,
@@ -739,6 +751,9 @@ pub async fn initialize_components(
     }
 
     if components.contains(&Component::ProofDataHandler) {
+        let nh_kp =
+            Keypair::from_uri(&SecretUri::from_str(nh_config.seed_phrase.as_str()).unwrap())
+                .unwrap();
         task_futures.push(tokio::spawn(proof_data_handler::run_server(
             configs
                 .proof_data_handler_config
@@ -746,6 +761,7 @@ pub async fn initialize_components(
                 .context("proof_data_handler_config")?,
             store_factory.create_store().await,
             connection_pool.clone(),
+            Some(NhClient::new(nh_client.clone(), nh_kp)),
             stop_receiver.clone(),
         )));
     }

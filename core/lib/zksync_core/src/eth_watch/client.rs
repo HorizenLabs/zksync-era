@@ -61,6 +61,7 @@ pub struct EthHttpQueryClient {
     governance_address: Option<Address>,
     verifier_contract_abi: Contract,
     confirmations_for_eth_event: Option<u64>,
+    nh_verifier_contract_address: Address,
 }
 
 impl EthHttpQueryClient {
@@ -69,6 +70,7 @@ impl EthHttpQueryClient {
         zksync_contract_addr: Address,
         governance_address: Option<Address>,
         confirmations_for_eth_event: Option<u64>,
+        nh_verifier_contract_address: Address,
     ) -> Self {
         tracing::debug!(
             "New eth client, zkSync addr: {:x}, governance addr: {:?}",
@@ -82,6 +84,7 @@ impl EthHttpQueryClient {
             governance_address,
             verifier_contract_abi: verifier_contract(),
             confirmations_for_eth_event,
+            nh_verifier_contract_address,
         }
     }
 
@@ -93,11 +96,15 @@ impl EthHttpQueryClient {
     ) -> Result<Vec<Log>, Error> {
         let filter = FilterBuilder::default()
             .address(
-                [Some(self.zksync_contract_addr), self.governance_address]
-                    .iter()
-                    .flatten()
-                    .copied()
-                    .collect(),
+                [
+                    Some(self.zksync_contract_addr),
+                    self.governance_address,
+                    Some(self.nh_verifier_contract_address),
+                ]
+                .iter()
+                .flatten()
+                .copied()
+                .collect(),
             )
             .from_block(from)
             .to_block(to)

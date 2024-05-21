@@ -11,8 +11,8 @@ use zksync_config::{
         },
         fri_prover_group::FriProverGroupConfig,
         house_keeper::HouseKeeperConfig,
-        FriProofCompressorConfig, FriProverConfig, FriWitnessGeneratorConfig, ObservabilityConfig,
-        PrometheusConfig, ProofDataHandlerConfig, WitnessGeneratorConfig,
+        FriProofCompressorConfig, FriProverConfig, FriWitnessGeneratorConfig, NewHorizenConfig,
+        ObservabilityConfig, PrometheusConfig, ProofDataHandlerConfig, WitnessGeneratorConfig,
     },
     ApiConfig, ContractsConfig, DBConfig, ETHClientConfig, ETHSenderConfig, ETHWatchConfig,
     GasAdjusterConfig, GenesisConfig, ObjectStoreConfig, PostgresConfig,
@@ -139,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
             gas_adjuster_config: GasAdjusterConfig::from_env().ok(),
             object_store_config: ObjectStoreConfig::from_env().ok(),
             consensus_config: config::read_consensus_config().context("read_consensus_config()")?,
+            new_horizen_config: NewHorizenConfig::from_env().ok(),
         },
     };
     let secrets: Secrets = match opt.secrets_path {

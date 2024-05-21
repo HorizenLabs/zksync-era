@@ -37,6 +37,7 @@ zksync_merkle_tree.workspace = true
 zksync_mini_merkle_tree.workspace = true
 prometheus_exporter.workspace = true
 zksync_prover_interface.workspace = true
+zksync_basic_types.workspace = true
 zksync_web3_decl = { workspace = true, features = [
     "server",
     "client",
@@ -76,6 +77,7 @@ thiserror.workspace = true
 async-trait.workspace = true
 bitflags.workspace = true
 thread_local.workspace = true
+bincode.workspace = true
 
 reqwest = { workspace = true, features = ["blocking", "json"] }
 hex.workspace = true
@@ -91,6 +93,12 @@ axum = { workspace = true,features = [
 once_cell.workspace = true
 
 tracing.workspace = true
+num-bigint = "0.4"
+crypto_codegen.workspace = true
+
+subxt = { version = "0.32.1", features = ["substrate-compat"] }
+subxt-signer = { version = "0.32.1", features = ["subxt"] }
+hex-literal = "0.4.1"
 
 [dev-dependencies]
 zksync_test_account.workspace = true

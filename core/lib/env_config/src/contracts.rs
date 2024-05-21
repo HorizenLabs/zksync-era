@@ -75,6 +75,7 @@ mod tests {
                 "0x4be443afd605a782b6e56d199df2460a025c81b3dea144e135bece83612563f2",
             ),
             genesis_protocol_version: Some(22),
+            nh_verifier_addr: addr("0x1bccc36e10a911f7209425271e66e606e95dafc5"),
         }
     }
 

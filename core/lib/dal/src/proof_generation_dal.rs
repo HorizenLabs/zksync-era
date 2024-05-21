@@ -3,7 +3,8 @@ use std::time::Duration;
 
 use strum::{Display, EnumString};
 use zksync_db_connection::{connection::Connection, utils::pg_interval_from_duration};
-use zksync_types::L1BatchNumber;
+use zksync_types::{L1BatchNumber, H256, U256};
+use zksync_utils::u256_to_big_decimal;
 
 use crate::{Core, SqlxError};
 
@@ -73,6 +74,8 @@ impl ProofGenerationDal<'_, '_> {
         &mut self,
         block_number: L1BatchNumber,
         proof_blob_url: &str,
+        attestation_id: u64,
+        attestation_element: H256,
     ) -> Result<(), SqlxError> {
         sqlx::query!(
             r#"
@@ -80,12 +83,16 @@ impl ProofGenerationDal<'_, '_> {
             SET
                 status = 'generated',
                 proof_blob_url = $1,
-                updated_at = NOW()
+                updated_at = NOW(),
+                attestation_id = $3,
+                attestation_element = $4
             WHERE
                 l1_batch_number = $2
             "#,
             proof_blob_url,
-            i64::from(block_number.0)
+            i64::from(block_number.0),
+            u256_to_big_decimal(U256::from(attestation_id)),
+            attestation_element.as_bytes(),
         )
         .execute(self.storage.conn())
         .await?
@@ -118,19 +125,25 @@ impl ProofGenerationDal<'_, '_> {
 
     pub async fn mark_proof_generation_job_as_skipped(
         &mut self,
-        block_number: L1BatchNumber,
+        batch_number: L1BatchNumber,
+        attestation_id: u64,
+        attestation_element: H256,
     ) -> Result<(), SqlxError> {
         sqlx::query!(
             r#"
             UPDATE proof_generation_details
             SET
                 status = $1,
-                updated_at = NOW()
+                updated_at = NOW(),
+                attestation_id = $3,
+                attestation_element = $4
             WHERE
                 l1_batch_number = $2
             "#,
             ProofGenerationJobStatus::Skipped.to_string(),
-            i64::from(block_number.0)
+            i64::from(batch_number.0),
+            u256_to_big_decimal(U256::from(attestation_id)),
+            attestation_element.as_bytes(),
         )
         .execute(self.storage.conn())
         .await?
@@ -138,6 +151,27 @@ impl ProofGenerationDal<'_, '_> {
         .eq(&1)
         .then_some(())
         .ok_or(sqlx::Error::RowNotFound)
+    }
+
+    pub async fn get_nh_attestation_element_from_batch_number(
+        &mut self,
+        batch_number: L1BatchNumber,
+    ) -> sqlx::Result<Option<H256>> {
+        Ok(sqlx::query!(
+            r#"
+            SELECT
+                attestation_element
+            FROM
+                proof_generation_details
+            WHERE
+                l1_batch_number = $1
+            "#,
+            i64::from(batch_number.0),
+        )
+        .fetch_optional(self.storage.conn())
+        .await?
+        .and_then(|row| row.attestation_element)
+        .map(|attestation| H256::from_slice(&attestation)))
     }
 
     pub async fn get_oldest_unpicked_batch(&mut self) -> Option<L1BatchNumber> {

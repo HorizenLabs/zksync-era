@@ -45,6 +45,7 @@ impl WiringLayer for EthWatchLayer {
             self.contracts_config.diamond_proxy_addr,
             Some(self.contracts_config.governance_addr),
             self.eth_watch_config.confirmations_for_eth_event,
+            self.contracts_config.nh_verifier_addr,
         );
         context.add_task(Box::new(EthWatchTask {
             main_pool,
