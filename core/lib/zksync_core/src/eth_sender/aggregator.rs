@@ -309,7 +309,7 @@ impl Aggregator {
 
     async fn load_real_proof_operation(
         storage: &mut Connection<'_, Core>,
-        _l1_verifier_config: L1VerifierConfig,
+        l1_verifier_config: L1VerifierConfig,
         _proof_loading_mode: &ProofLoadingMode,
         _blob_store: &dyn ObjectStore,
         is_4844_mode: bool,
@@ -346,21 +346,16 @@ impl Aggregator {
             .await
             .unwrap()
         {
-            let _verifier_config_for_next_batch = storage
+            let verifier_config_for_next_batch = storage
                 .protocol_versions_dal()
                 .l1_verifier_config_for_version(version_id)
                 .await
                 .unwrap();
-            //println!(
-            //    "verifier_config_for_next_batch {:?}, l1_verifier_config {:?}",
-            //    verifier_config_for_next_batch, l1_verifier_config
-            //);
-            //TODO: readd
-            //if verifier_config_for_next_batch != l1_verifier_config {
-            //    return None;
-            //}
+
+            if verifier_config_for_next_batch != l1_verifier_config {
+                return None;
+            }
         }
-        println!("Batch to prove {:?}", batch_to_prove);
         match storage
             .nh_dal()
             .get_nh_attestation_from_batch_number(batch_to_prove)

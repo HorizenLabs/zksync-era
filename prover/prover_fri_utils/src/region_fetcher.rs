@@ -23,13 +23,14 @@ async fn fetch_from_url(url: &str) -> anyhow::Result<String> {
 }
 
 fn parse_zone(data: &str) -> anyhow::Result<String> {
+    /*
     // Statically provided Regex should always compile.
     let re = Regex::new(r"^projects/\d+/zones/(\w+-\w+-\w+)$").unwrap();
     if let Some(caps) = re.captures(data) {
         let zone = &caps[1];
         return Ok(zone.to_string());
-    }
-    anyhow::bail!("failed to extract zone from: {data}");
+    }*/
+    return Ok(data.to_string());
 }
 
 #[cfg(test)]
