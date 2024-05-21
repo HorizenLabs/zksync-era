@@ -144,6 +144,9 @@ impl ProtoRepr for proto::Contracts {
                 .transpose()
                 .context("genesis_root")?,
             genesis_protocol_version: self.genesis_protocol_version.map(|a| a as u16),
+            nh_verifier_addr: required(&self.nh_verifier_addr)
+                .and_then(|x| parse_h160(x))
+                .context("nh_verifier_addr")?,
         })
     }
 
@@ -222,6 +225,7 @@ impl ProtoRepr for proto::Contracts {
                 .map(|x| x.as_bytes().into()),
             genesis_rollup_leaf_index: this.genesis_rollup_leaf_index,
             genesis_protocol_version: this.genesis_protocol_version.map(|a| a as u32),
+            nh_verifier_addr: Some(this.nh_verifier_addr.as_bytes().into()),
         }
     }
 }

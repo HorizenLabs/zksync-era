@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package zksync.config.new_horizen;
+
+message NewHorizen {
+  optional string url = 1; // required; string
+  optional string seed_phrase = 2; // required; string
+}

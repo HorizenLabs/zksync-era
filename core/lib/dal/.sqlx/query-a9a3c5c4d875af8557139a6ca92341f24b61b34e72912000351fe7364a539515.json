@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                attestation_id,\n                attestation\n            FROM\n                new_horizen_attestation\n            WHERE\n                attestation_id = (\n                    SELECT\n                        attestation_id\n                    FROM\n                        proof_generation_details\n                    WHERE\n                        l1_batch_number = $1\n                )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attestation_id",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 1,
+        "name": "attestation",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "a9a3c5c4d875af8557139a6ca92341f24b61b34e72912000351fe7364a539515"
+}

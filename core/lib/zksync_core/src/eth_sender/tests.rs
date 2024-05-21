@@ -147,6 +147,7 @@ impl EthSenderTester {
                 aggregator_operate_4844_mode,
                 PubdataDA::Calldata,
                 l1_batch_commit_data_generator.clone(),
+                None,
             ),
             gateway.clone(),
             // zkSync contract address
@@ -1038,7 +1039,7 @@ async fn prove_l1_batch(
     let operation = AggregatedOperation::PublishProofOnchain(ProveBatches {
         prev_l1_batch: l1_batch_with_metadata(last_committed_l1_batch),
         l1_batches: vec![l1_batch_with_metadata(l1_batch)],
-        proofs: vec![],
+        proofs: vec![].into(),
         should_verify: false,
     });
     send_operation(tester, operation, confirm).await

@@ -3,7 +3,7 @@
 pub use self::{
     commit_batches::{CommitBatchesRollup, CommitBatchesValidium},
     execute_batches::ExecuteBatches,
-    prove_batches::ProveBatches,
+    prove_batches::{NewHorizenProof, ProveBatches},
 };
 
 mod commit_batches;

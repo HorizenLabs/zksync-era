@@ -97,6 +97,7 @@ impl WiringLayer for EthSenderLayer {
             eth_client_blobs_addr.is_some(),
             self.eth_sender_config.sender.pubdata_sending_mode.into(),
             l1_batch_commit_data_generator.clone(),
+            None,
         );
 
         let config = self.eth_sender_config.sender;

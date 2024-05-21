@@ -44,6 +44,8 @@ pub struct ContractsConfig {
     pub state_transition_proxy_addr: Option<Address>,
     pub state_transition_impl_addr: Option<Address>,
     pub transparent_proxy_admin_addr: Option<Address>,
+
+    pub nh_verifier_addr: Address,
 }
 
 impl ContractsConfig {
@@ -89,6 +91,7 @@ impl ContractsConfig {
             state_transition_impl_addr: Some(Address::repeat_byte(0x17)),
             genesis_batch_commitment: Some(H256::repeat_byte(0x17)),
             genesis_protocol_version: Some(22),
+            nh_verifier_addr: Address::repeat_byte(0x18),
         }
     }
 }

@@ -24,6 +24,7 @@ use self::{
     },
     metrics::{PollStage, METRICS},
 };
+use crate::eth_watch::event_processors::nh::NHEventProcessor;
 
 pub mod client;
 mod event_processors;
@@ -80,6 +81,9 @@ impl EthWatch {
             );
             event_processors.push(Box::new(governance_upgrades_processor))
         }
+
+        let nh_processor = NHEventProcessor::new();
+        event_processors.push(Box::new(nh_processor));
 
         let topics = event_processors
             .iter()
@@ -196,12 +200,14 @@ pub async fn start_eth_watch(
     diamond_proxy_addr: Address,
     governance: (Contract, Address),
     stop_receiver: watch::Receiver<bool>,
+    nh_verifier_contract_address: Address,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
     let eth_client = EthHttpQueryClient::new(
         eth_gateway,
         diamond_proxy_addr,
         Some(governance.1),
         config.confirmations_for_eth_event,
+        nh_verifier_contract_address,
     );
 
     let eth_watch = EthWatch::new(

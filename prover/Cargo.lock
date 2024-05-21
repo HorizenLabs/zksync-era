@@ -7504,6 +7504,7 @@ dependencies = [
  "tokio",
  "tracing",
  "vise",
+ "zksync_basic_types",
  "zksync_consensus_roles",
  "zksync_consensus_storage",
  "zksync_contracts",

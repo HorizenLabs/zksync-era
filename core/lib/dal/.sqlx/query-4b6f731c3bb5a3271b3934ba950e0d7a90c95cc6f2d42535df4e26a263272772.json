@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO\n                new_horizen_attestation (attestation_id, attestation)\n            VALUES\n                ($1, $2)\n            ON CONFLICT (attestation_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Numeric",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4b6f731c3bb5a3271b3934ba950e0d7a90c95cc6f2d42535df4e26a263272772"
+}

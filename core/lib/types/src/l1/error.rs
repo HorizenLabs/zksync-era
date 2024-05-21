@@ -11,3 +11,11 @@ pub enum L1TxParseError {
     #[error("Ethereum ABI error: {0}")]
     AbiError(#[from] crate::ethabi::Error),
 }
+
+#[derive(Debug, Error)]
+pub enum NewHorizenParseError {
+    #[error("Failed to parse NewHorizen attestation")]
+    NewHorizenParseFailed,
+    #[error("Ethereum ABI error: {0}")]
+    AbiError(#[from] crate::ethabi::Error),
+}

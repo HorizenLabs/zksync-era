@@ -72,6 +72,7 @@ impl Task for ProofDataHandlerTask {
             self.proof_data_handler_config,
             self.blob_store,
             self.main_pool,
+            None,
             stop_receiver.0,
         )
         .await
