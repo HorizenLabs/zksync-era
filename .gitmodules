@@ -1,4 +1,4 @@
 [submodule "contracts"]
 path = contracts
 url = https://github.com/HorizenLabs/era-contracts.git
-branch = mo/NH_integration
+branch = 0.1.0
