@@ -8,7 +8,10 @@ use axum::{
 };
 use crypto_codegen::serialize_proof;
 use hex::encode;
-use subxt::{OnlineClient, PolkadotConfig};
+use subxt::{
+    ext::scale_value::{Composite, Value},
+    OnlineClient, PolkadotConfig,
+};
 use subxt_signer::sr25519::Keypair;
 use zksync_config::configs::ProofDataHandlerConfig;
 use zksync_dal::{ConnectionPool, Core, CoreDal, SqlxError};
@@ -37,8 +40,25 @@ impl NhClient {
         Self { client, kp }
     }
 
-    async fn submit_proof(&self, raw_proof: [u8; 1440]) -> Result<(u64, H256), subxt::Error> {
-        let submit_proof_tx = nh::tx().settlement_zksync_pallet().submit_proof(raw_proof);
+    async fn submit_proof(
+        &self,
+        proof: [u8; 1408],
+        pi: [u8; 32],
+    ) -> Result<(u64, H256), subxt::Error> {
+        // subxt macro gets confused with VkOrHash type, so we resort to the untyped,
+        // dynamic interface.
+        let submit_proof_tx = subxt::dynamic::tx(
+            "SettlementZksyncPallet",
+            "submit_proof",
+            Composite::Named(vec![
+                (
+                    "vk_or_hash".into(),
+                    Value::variant("Vk", Composite::Unnamed(vec![Value::from_bytes(vec![])])),
+                ),
+                ("proof".into(), Value::from_bytes(&proof)),
+                ("pubs".into(), Value::from_bytes(&pi)),
+            ]),
+        );
 
         // Submit the submitProof extrinsic, and wait for it to be successful
         // and in a finalized block. We get back the extrinsic events if all is well.
@@ -50,10 +70,10 @@ impl NhClient {
             .wait_for_finalized_success()
             .await?;
 
-        // Find a Transfer event and print it.
-        let transfer_event = events.find_first::<nh::poe::events::NewElement>()?.unwrap();
-        println!("New Element success: {transfer_event:?}");
-        Ok((transfer_event.attestation_id, transfer_event.value))
+        // Find the NewElement event and print it.
+        let new_element_event = events.find_first::<nh::poe::events::NewElement>()?.unwrap();
+        println!("New Element success: {new_element_event:?}");
+        Ok((new_element_event.attestation_id, new_element_event.value))
     }
 }
 
@@ -282,21 +302,27 @@ impl RequestProcessor {
                     }
                 }
                 let (input, p) = serialize_proof(&proof.scheduler_proof);
-                let proof_bytes = p.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
-                let pi_bytes = input.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+                let proof_bytes: [u8; 1408] = p
+                    .iter()
+                    .flat_map(u256_to_bytes_be)
+                    .collect::<Vec<u8>>()
+                    .try_into()
+                    .unwrap();
+                let pi_bytes: [u8; 32] = input
+                    .iter()
+                    .flat_map(u256_to_bytes_be)
+                    .collect::<Vec<u8>>()
+                    .try_into()
+                    .unwrap();
 
                 println!("PROOF {:?}", encode(proof_bytes.clone()));
                 println!("PI {:?}", encode(pi_bytes.clone()));
-
-                let raw_proof: [u8; 1440] = [proof_bytes, pi_bytes].concat().as_slice()[0..1440]
-                    .try_into()
-                    .unwrap();
 
                 let (attestation_id, value) = self
                     .nh_client
                     .as_ref()
                     .unwrap()
-                    .submit_proof(raw_proof)
+                    .submit_proof(proof_bytes, pi_bytes)
                     .await
                     .unwrap();
 
@@ -324,21 +350,27 @@ impl RequestProcessor {
                 let parsed: L1BatchProofForL1 = bincode::deserialize(data.as_slice()).unwrap();
 
                 let (input, p) = serialize_proof(&parsed.scheduler_proof);
-                let proof_bytes = p.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
-                let pi_bytes = input.iter().flat_map(u256_to_bytes_be).collect::<Vec<u8>>();
+                let proof_bytes: [u8; 1408] = p
+                    .iter()
+                    .flat_map(u256_to_bytes_be)
+                    .collect::<Vec<u8>>()
+                    .try_into()
+                    .unwrap();
+                let pi_bytes: [u8; 32] = input
+                    .iter()
+                    .flat_map(u256_to_bytes_be)
+                    .collect::<Vec<u8>>()
+                    .try_into()
+                    .unwrap();
 
                 println!("PROOF {:?}", encode(proof_bytes.clone()));
                 println!("PI {:?}", encode(pi_bytes.clone()));
-
-                let raw_proof: [u8; 1440] = [proof_bytes, pi_bytes].concat().as_slice()[0..1440]
-                    .try_into()
-                    .unwrap();
 
                 let (attestation_id, value) = self
                     .nh_client
                     .as_ref()
                     .unwrap()
-                    .submit_proof(raw_proof)
+                    .submit_proof(proof_bytes, pi_bytes)
                     .await
                     .unwrap();
 
