@@ -23,4 +23,5 @@ base = [
     'base/fri_witness_vector_generator.toml',
     'base/fri_prover_gateway.toml',
     'base/fri_proof_compressor.toml',
+    'base/new_horizen.toml',
 ]
