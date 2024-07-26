@@ -1,0 +1,23 @@
+[package]
+name = "submit_proof_to_zkv"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+# cli
+clap = { version = "4.5.9", features = ["derive"] }
+clio = { version = "0.3.5", features = ["clap-parse"] }
+
+# subxt
+subxt = { version = "0.32.1", features = ["substrate-compat"] }
+subxt-signer = { version = "0.32.1", features = ["subxt"] }
+tokio = { version = "1.35", features = ["macros", "time", "rt-multi-thread"] }
+
+# zksync-era
+bincode = { version = "1.3.3" }
+serde = { version = "1.0.204" }
+ethereum-types = { version = "=0.14.1" }
+crypto_codegen = { package = "codegen", git = "https://github.com/matter-labs/solidity_plonk_verifier.git", rev = "82f96b7156551087f1c9bfe4f0ea68845b6debfc" }
+franklin-crypto = {features = ["plonk"], git = "https://github.com/matter-labs/franklin-crypto", rev = "5695d07c7bc604c2c39a27712ffac171d39ee1ed"}
